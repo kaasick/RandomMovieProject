@@ -2,6 +2,8 @@ package io.delivery.randommoviepicker.service;
 
 import io.delivery.randommoviepicker.config.APIConfig;
 import io.delivery.randommoviepicker.model.Credits;
+import io.delivery.randommoviepicker.model.Genre;
+import io.delivery.randommoviepicker.model.GenreResponse;
 import io.delivery.randommoviepicker.model.Movie;
 import io.delivery.randommoviepicker.model.MovieRange;
 import io.delivery.randommoviepicker.model.MovieResponse;
@@ -25,11 +27,74 @@ public class MovieService {
         this.random = new Random();
     }
 
+    // Method to get all movie genres
+    public List<Genre> getMovieGenres() throws IOException {
+        Response<GenreResponse> response = api.getMovieGenres(apiConfig.getApiKey()).execute();
+
+        if (!response.isSuccessful() || response.body() == null) {
+            throw new IOException("Failed to fetch movie genres");
+        }
+
+        return response.body().getGenres();
+    }
+
+    // Method to get movies by genre
+    public MovieResponse getMoviesByGenre(Integer genreId, Integer page) throws IOException {
+        Response<MovieResponse> response = api.getMoviesByGenre(
+                apiConfig.getApiKey(),
+                genreId,
+                page
+        ).execute();
+
+        if (!response.isSuccessful() || response.body() == null) {
+            throw new IOException("Failed to fetch movies for genre " + genreId);
+        }
+
+        return response.body();
+    }
+
+    // Get a random movie from a specific genre
+    public Movie getRandomMovieByGenre(Integer genreId, MovieRange range) throws IOException {
+        // Get list of movies by genre
+        List<Movie> allMovies = new ArrayList<>();
+        int page = 1;
+
+        while (allMovies.size() < range.getLimit()) {
+            Response<MovieResponse> response = api.getMoviesByGenre(
+                    apiConfig.getApiKey(),
+                    genreId,
+                    page
+            ).execute();
+
+            if (!response.isSuccessful() || response.body() == null) {
+                throw new IOException("Failed to fetch movies on page " + page);
+            }
+
+            List<Movie> pageMovies = response.body().getResults();
+            if (pageMovies.isEmpty()) {
+                break;
+            }
+
+            allMovies.addAll(pageMovies);
+            page++;
+        }
+
+        if (allMovies.size() > range.getLimit()) {
+            allMovies = allMovies.subList(0, range.getLimit());
+        }
+
+        // Get random movie
+        Movie selectedMovie = allMovies.get(random.nextInt(allMovies.size()));
+
+        // Fetch complete movie details
+        return fetchMovieDetails(selectedMovie);
+    }
+
+    // Get random movie from popular movies
     public Movie getRandomMovie(MovieRange range) throws IOException {
         // Get list of popular movies
         List<Movie> allMovies = new ArrayList<>();
         int page = 1;
-        int moviesPerPage = 20;
 
         while (allMovies.size() < range.getLimit()) {
             Response<MovieResponse> response = api.getPopularMovies(apiConfig.getApiKey(), page)
@@ -41,52 +106,56 @@ public class MovieService {
 
             List<Movie> pageMovies = response.body().getResults();
             if (pageMovies.isEmpty()) {
-                break;  // No more movies to fetch
+                break;
             }
 
             allMovies.addAll(pageMovies);
             page++;
         }
 
-        // Trim to exact limit
+
         if (allMovies.size() > range.getLimit()) {
             allMovies = allMovies.subList(0, range.getLimit());
         }
 
-        // Get random movie
+
         Movie selectedMovie = allMovies.get(random.nextInt(allMovies.size()));
 
-        System.out.println("Details URL: " + api.getMovieDetails(selectedMovie.getId(), apiConfig.getApiKey()).request().url());
-        // Get detailed movie info
+
+        return fetchMovieDetails(selectedMovie);
+    }
+
+    // Helper method to fetch complete movie details
+    private Movie fetchMovieDetails(Movie movie) throws IOException {
+
         Response<Movie> detailsResponse = api.getMovieDetails(
-                selectedMovie.getId(),
+                movie.getId(),
                 apiConfig.getApiKey()
         ).execute();
 
         if (detailsResponse.isSuccessful() && detailsResponse.body() != null) {
             Movie detailedMovie = detailsResponse.body();
 
-            // Add this line to see the complete raw response
-            System.out.println("COMPLETE RAW RESPONSE: " + detailsResponse.toString());
 
-            // Add this debug block
-            System.out.println("RAW API RESPONSE DATA:");
-            System.out.println("Runtime: " + detailedMovie.getRuntime());
-            System.out.println("Rating: " + detailedMovie.getRating());
-            System.out.println("Release Date: " + detailedMovie.getReleaseDate());
-            System.out.println("Poster Path: " + detailedMovie.getPosterPath());
-
-            // Add base URL to poster path if it exists
             if (detailedMovie.getPosterPath() != null) {
                 detailedMovie.setPosterPath("https://image.tmdb.org/t/p/w500" + detailedMovie.getPosterPath());
             }
 
-            selectedMovie = detailedMovie;  // Update with detailed info
+            movie = detailedMovie;
         }
 
-        // Get director info
+
+        addDirectorInfo(movie);
+
+        return movie;
+    }
+
+    // Helper method to add director information to a movie
+    // Because the director info is not stored on the most basic API call, it is stored with the crew information
+    // from where it needs to be extracted
+    private void addDirectorInfo(Movie movie) throws IOException {
         Response<Credits> creditsResponse = api.getMovieCredits(
-                selectedMovie.getId(),
+                movie.getId(),
                 apiConfig.getApiKey()
         ).execute();
 
@@ -97,22 +166,7 @@ public class MovieService {
                     .findFirst()
                     .orElse("Unknown Director");
 
-            selectedMovie.setDirector(director);
-        }
-
-        return selectedMovie;
-    }
-
-    public void testApiConnection() {
-        try {
-            Response<MovieResponse> response = api.getPopularMovies(apiConfig.getApiKey(), 1).execute();
-            if (response.isSuccessful()) {
-                System.out.println("API Connection Successful");
-            } else {
-                System.out.println("API Connection Failed: " + response.code());
-            }
-        } catch (Exception e) {
-            System.out.println("API Connection Failed: " + e.getMessage());
+            movie.setDirector(director);
         }
     }
 }

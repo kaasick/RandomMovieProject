@@ -16,3 +16,8 @@ export interface Movie {
     runtime: number;
 }
 
+export interface Genre {
+    id: number;
+    name: string;
+}
+

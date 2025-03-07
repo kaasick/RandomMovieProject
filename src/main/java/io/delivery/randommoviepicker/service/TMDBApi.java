@@ -1,6 +1,7 @@
 package io.delivery.randommoviepicker.service;
 
 import io.delivery.randommoviepicker.model.Credits;
+import io.delivery.randommoviepicker.model.GenreResponse;
 import io.delivery.randommoviepicker.model.Movie;
 import io.delivery.randommoviepicker.model.MovieResponse;
 import retrofit2.Call;
@@ -25,5 +26,17 @@ public interface TMDBApi {
     Call<Credits> getMovieCredits(
             @Path("movie_id") Integer movieId,
             @Query("api_key") String apiKey
+    );
+
+    @GET("genre/movie/list")
+    Call<GenreResponse> getMovieGenres(
+            @Query("api_key") String apiKey
+    );
+
+    @GET("discover/movie")
+    Call<MovieResponse> getMoviesByGenre(
+            @Query("api_key") String apiKey,
+            @Query("with_genres") Integer genreId,
+            @Query("page") Integer page
     );
 }
